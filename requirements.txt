@@ -1,3 +1,3 @@
-python-telegram-bot==21.11.1
-PyMuPDF==1.26.4
-openai==1.107.2
+python-telegram-bot
+pymupdf
+openai
