@@ -1,5 +1,4 @@
 import html
-import json
 import logging
 import os
 import re
@@ -50,12 +49,12 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 INSTITUTION_NAME = "HGZ/MF 8 DR. GILBERTO FLORES IZQUIERDO"
 
-INCLUDE_JSON_FILE = os.getenv("INCLUDE_JSON_FILE", "true").lower() == "true"
 INCLUDE_PDF_FILE = os.getenv("INCLUDE_PDF_FILE", "true").lower() == "true"
 INCLUDE_DOCX_FILE = os.getenv("INCLUDE_DOCX_FILE", "true").lower() == "true"
 
-MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "7000"))
-MAX_PROMPT_CHARS = int(os.getenv("MAX_PROMPT_CHARS", "6500"))
+MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "10000"))
+MAX_PROMPT_CHARS = int(os.getenv("MAX_PROMPT_CHARS", "20000"))
+MAX_EXTENDED_CONTEXT_CHARS = int(os.getenv("MAX_EXTENDED_CONTEXT_CHARS", "18000"))
 TELEGRAM_MAX_MESSAGE = 4000
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "20"))
 MIN_TEXT_LENGTH = int(os.getenv("MIN_TEXT_LENGTH", "200"))
@@ -170,13 +169,14 @@ Devuelve exactamente esta estructura JSON:
 SYSTEM_PROMPT_FINAL_RESUMEN = """
 Eres un asistente clínico-administrativo.
 
-Tu tarea es elaborar un RESUMEN CLÍNICO DOCUMENTAL basado únicamente en información previamente consolidada.
+Tu tarea es elaborar un RESUMEN CLÍNICO DOCUMENTAL basado únicamente en información previamente consolidada y ampliada.
 
 Reglas obligatorias:
 - No inventes información.
 - No agregues datos nuevos.
 - Si algo no está documentado, escribe "No se documenta".
 - Redacción formal, objetiva y ordenada.
+- Procura incorporar la mayor cantidad posible de información documental relevante.
 - Devuelve JSON válido.
 
 Devuelve exactamente esta estructura JSON:
@@ -205,13 +205,14 @@ Devuelve exactamente esta estructura JSON:
 SYSTEM_PROMPT_FINAL_CRONOLOGIA = """
 Eres un asistente clínico-administrativo.
 
-Tu tarea es elaborar una CRONOLOGÍA MÉDICA DOCUMENTAL basada únicamente en información previamente consolidada.
+Tu tarea es elaborar una CRONOLOGÍA MÉDICA DOCUMENTAL basada únicamente en información previamente consolidada y ampliada.
 
 Reglas obligatorias:
 - No inventes información.
 - No agregues datos nuevos.
 - Ordena cronológicamente en la medida de lo posible con base en las fechas documentadas.
 - Si una fecha no está documentada claramente, conserva "No se documenta".
+- Procura conservar el mayor detalle documental útil.
 - Devuelve JSON válido.
 
 Devuelve exactamente esta estructura JSON:
@@ -285,7 +286,7 @@ Devuelve exactamente esta estructura JSON:
 SYSTEM_PROMPT_FINAL_ESTADO_AUTORIDAD = """
 Eres un asistente clínico-administrativo.
 
-Tu tarea es elaborar un BORRADOR DE ESTADO DE SALUD PARA AUTORIDAD basado únicamente en información previamente consolidada.
+Tu tarea es elaborar un BORRADOR DE ESTADO DE SALUD PARA AUTORIDAD basado únicamente en información previamente consolidada y ampliada.
 
 Reglas obligatorias:
 - No inventes información.
@@ -293,6 +294,7 @@ Reglas obligatorias:
 - No emitas opiniones médico-legales.
 - Usa redacción formal, técnica, objetiva e institucional.
 - Si algo no está documentado, escribe "No se documenta".
+- Procura incorporar el mayor detalle documental relevante.
 - Devuelve JSON válido.
 
 Devuelve exactamente esta estructura JSON:
@@ -323,7 +325,7 @@ Devuelve exactamente esta estructura JSON:
 SYSTEM_PROMPT_FINAL_ESTADO_INSTITUCIONAL = """
 Eres un asistente clínico-administrativo.
 
-Tu tarea es elaborar un BORRADOR DE ESTADO DE SALUD INSTITUCIONAL basado únicamente en información previamente consolidada.
+Tu tarea es elaborar un BORRADOR DE ESTADO DE SALUD INSTITUCIONAL basado únicamente en información previamente consolidada y ampliada.
 
 Reglas obligatorias:
 - No inventes información.
@@ -332,6 +334,7 @@ Reglas obligatorias:
 - Usa redacción formal, técnica, objetiva y administrativa.
 - Si algo no está documentado, escribe "No se documenta".
 - Debe ser útil como borrador institucional.
+- Procura incorporar el mayor detalle documental relevante.
 - Devuelve JSON válido.
 
 Devuelve exactamente esta estructura JSON:
@@ -430,6 +433,7 @@ def split_text(text: str, max_chars: int = MAX_CHUNK_CHARS) -> List[str]:
 
 
 def safe_json_loads(content: str) -> Dict[str, Any]:
+    import json
     try:
         return json.loads(content)
     except json.JSONDecodeError:
@@ -535,6 +539,63 @@ def sort_cronologia(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def escape_pdf_text(text: str) -> str:
     return html.escape(text or "").replace("\n", "<br/>")
 
+
+def build_extended_context(merged: Dict[str, Any], max_chars: int = MAX_EXTENDED_CONTEXT_CHARS) -> str:
+    import json
+    sections: List[str] = []
+
+    sections.append("DATOS DEL PACIENTE:")
+    sections.append(json.dumps(merged.get("paciente", {}), ensure_ascii=False, indent=2))
+
+    sections.append("\nFECHAS RELEVANTES:")
+    sections.append("\n".join(merged.get("fechas_relevantes", [])) or "No se documenta")
+
+    sections.append("\nSERVICIOS CLÍNICOS:")
+    sections.append("\n".join(merged.get("servicios_clinicos", [])) or "No se documenta")
+
+    sections.append("\nMÉDICOS TRATANTES:")
+    sections.append("\n".join(merged.get("medicos_tratantes", [])) or "No se documenta")
+
+    sections.append("\nSIGNOS VITALES:")
+    sections.append("\n".join(merged.get("signos_vitales", [])) or "No se documenta")
+
+    sections.append("\nDIAGNÓSTICOS GLOBALES DOCUMENTADOS:")
+    sections.append("\n".join(merged.get("diagnosticos_globales", [])) or "No se documenta")
+
+    sections.append("\nTRATAMIENTO GLOBAL DOCUMENTADO:")
+    sections.append("\n".join(merged.get("tratamiento_global_documentado", [])) or "No se documenta")
+
+    sections.append("\nESTADO GLOBAL DOCUMENTADO:")
+    sections.append("\n".join(merged.get("estado_global_documentado", [])) or "No se documenta")
+
+    sections.append("\nPRONÓSTICO GLOBAL DOCUMENTADO:")
+    sections.append("\n".join(merged.get("pronostico_global_documentado", [])) or "No se documenta")
+
+    sections.append("\nOBSERVACIONES:")
+    sections.append("\n".join(merged.get("observaciones", [])) or "No se documenta")
+
+    sections.append("\nCRONOLOGÍA DOCUMENTADA:")
+    cronologia = merged.get("notas_cronologicas", [])
+    if not cronologia:
+        sections.append("No se documenta")
+    else:
+        for i, item in enumerate(cronologia, start=1):
+            sections.append(
+                f"{i}. Fecha: {item.get('fecha', 'No se documenta')}\n"
+                f"Servicio: {item.get('servicio', 'No se documenta')}\n"
+                f"Tipo de nota: {item.get('tipo_nota', 'No se documenta')}\n"
+                f"Médico tratante: {item.get('medico_tratante', 'No se documenta')}\n"
+                f"Signos vitales: {', '.join(item.get('signos_vitales', [])) or 'No se documenta'}\n"
+                f"Resumen: {item.get('resumen', 'No se documenta')}\n"
+                f"Diagnósticos: {', '.join(item.get('diagnosticos', [])) or 'No se documenta'}\n"
+                f"Tratamiento: {', '.join(item.get('tratamiento', [])) or 'No se documenta'}\n"
+                f"Estado actual: {item.get('estado_actual', 'No se documenta')}\n"
+                f"Pronóstico: {item.get('pronostico', 'No se documenta')}\n"
+            )
+
+    full_text = "\n\n".join(sections)
+    return full_text[:max_chars]
+
 # =========================
 # EXTRACCIÓN Y CONSOLIDACIÓN
 # =========================
@@ -550,6 +611,7 @@ Texto:
 
 
 def merge_extractions(partials: List[Dict[str, Any]]) -> Dict[str, Any]:
+    import json
     merged = {
         "paciente": {
             "nombre": "No se documenta",
@@ -701,6 +763,7 @@ def process_medical_text(text: str) -> Dict[str, Any]:
 # =========================
 
 def build_estado_salud(merged: Dict[str, Any]) -> Dict[str, Any]:
+    import json
     prompt = f"""
 Genera un estado de salud utilizando exclusivamente la siguiente información consolidada.
 
@@ -715,34 +778,37 @@ Información consolidada:
 
 
 def build_resumen_clinico(merged: Dict[str, Any]) -> Dict[str, Any]:
+    extended_context = build_extended_context(merged)
     prompt = f"""
-Genera un resumen clínico documental utilizando exclusivamente la siguiente información consolidada.
+Genera un resumen clínico documental utilizando exclusivamente la siguiente información consolidada y ampliada.
 
 Institución: {INSTITUTION_NAME}
 Fecha de elaboración: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
-Información consolidada:
-{json.dumps(merged, ensure_ascii=False, indent=2)}
+Información ampliada:
+{extended_context}
 """
     data = chat_json(SYSTEM_PROMPT_FINAL_RESUMEN, prompt)
     return finalize_resumen(data, merged)
 
 
 def build_cronologia(merged: Dict[str, Any]) -> Dict[str, Any]:
+    extended_context = build_extended_context(merged)
     prompt = f"""
-Genera una cronología médica documental utilizando exclusivamente la siguiente información consolidada.
+Genera una cronología médica documental utilizando exclusivamente la siguiente información consolidada y ampliada.
 
 Institución: {INSTITUTION_NAME}
 Fecha de elaboración: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
-Información consolidada:
-{json.dumps(merged, ensure_ascii=False, indent=2)}
+Información ampliada:
+{extended_context}
 """
     data = chat_json(SYSTEM_PROMPT_FINAL_CRONOLOGIA, prompt)
     return finalize_cronologia(data, merged)
 
 
 def build_estado_familiar(merged: Dict[str, Any]) -> Dict[str, Any]:
+    import json
     prompt = f"""
 Genera un estado de salud para familiar utilizando exclusivamente la siguiente información consolidada.
 
@@ -757,28 +823,30 @@ Información consolidada:
 
 
 def build_estado_autoridad(merged: Dict[str, Any]) -> Dict[str, Any]:
+    extended_context = build_extended_context(merged)
     prompt = f"""
-Genera un estado de salud para autoridad utilizando exclusivamente la siguiente información consolidada.
+Genera un estado de salud para autoridad utilizando exclusivamente la siguiente información consolidada y ampliada.
 
 Institución: {INSTITUTION_NAME}
 Fecha de elaboración: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
-Información consolidada:
-{json.dumps(merged, ensure_ascii=False, indent=2)}
+Información ampliada:
+{extended_context}
 """
     data = chat_json(SYSTEM_PROMPT_FINAL_ESTADO_AUTORIDAD, prompt)
     return finalize_estado_autoridad(data, merged)
 
 
 def build_estado_institucional(merged: Dict[str, Any]) -> Dict[str, Any]:
+    extended_context = build_extended_context(merged)
     prompt = f"""
-Genera un estado de salud institucional utilizando exclusivamente la siguiente información consolidada.
+Genera un estado de salud institucional utilizando exclusivamente la siguiente información consolidada y ampliada.
 
 Institución: {INSTITUTION_NAME}
 Fecha de elaboración: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
-Información consolidada:
-{json.dumps(merged, ensure_ascii=False, indent=2)}
+Información ampliada:
+{extended_context}
 """
     data = chat_json(SYSTEM_PROMPT_FINAL_ESTADO_INSTITUCIONAL, prompt)
     return finalize_estado_institucional(data, merged)
@@ -1160,24 +1228,6 @@ async def send_outputs(
     try:
         for chunk in split_message_for_telegram(message):
             await update.message.reply_text(chunk)
-
-        if INCLUDE_JSON_FILE:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                delete=False,
-                suffix=".json",
-                encoding="utf-8",
-            ) as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-                json_path = f.name
-                temp_paths.append(json_path)
-
-            with open(json_path, "rb") as f:
-                await update.message.reply_document(
-                    document=f,
-                    filename=f"{base_filename}.json",
-                    caption="Archivo JSON generado"
-                )
 
         title_map = {
             "estado_salud": "ESTADO DE SALUD",
