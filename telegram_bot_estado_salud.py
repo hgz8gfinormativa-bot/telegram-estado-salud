@@ -364,10 +364,6 @@ Devuelve exactamente esta estructura JSON:
 # =========================
 
 def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
-    """
-    Extrae texto con PyMuPDF. Si no encuentra texto y OCR está activado,
-    intenta OCR por página.
-    """
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     pages = []
 
@@ -1015,98 +1011,57 @@ def finalize_estado_institucional(data: Dict[str, Any], merged: Dict[str, Any]) 
 # =========================
 
 def render_estado_message(data: Dict[str, Any]) -> str:
-    ident = data.get("identificacion", {})
-    return (
-        f"🏥 Estado de salud\n\n"
-        f"Unidad: {data.get('institucion', INSTITUTION_NAME)}\n"
-        f"Nombre: {ident.get('nombre', 'No se documenta')}\n"
-        f"NSS: {ident.get('nss', 'No se documenta')}\n"
-        f"Edad: {ident.get('edad', 'No se documenta')}\n"
-        f"Sexo: {ident.get('sexo', 'No se documenta')}\n\n"
-        f"Servicios clínicos:\n{format_list(data.get('servicios_clinicos'))}\n\n"
-        f"Resumen clínico:\n{data.get('resumen_clinico', 'No se documenta')}\n\n"
-        f"Estado actual:\n{data.get('estado_actual', 'No se documenta')}"
-    )
+    return data.get("texto_final", "No se documenta")
 
 
 def render_resumen_message(data: Dict[str, Any]) -> str:
-    ident = data.get("identificacion", {})
-    return (
-        f"📄 Resumen clínico\n\n"
-        f"Unidad: {data.get('institucion', INSTITUTION_NAME)}\n"
-        f"Nombre: {ident.get('nombre', 'No se documenta')}\n"
-        f"NSS: {ident.get('nss', 'No se documenta')}\n"
-        f"Edad: {ident.get('edad', 'No se documenta')}\n"
-        f"Sexo: {ident.get('sexo', 'No se documenta')}\n\n"
-        f"Servicios clínicos:\n{format_list(data.get('servicios_clinicos'))}\n\n"
-        f"Resumen clínico:\n{data.get('resumen_clinico', 'No se documenta')}"
-    )
+    return data.get("texto_final", "No se documenta")
 
 
 def render_cronologia_message(data: Dict[str, Any]) -> str:
-    cronologia = data.get("cronologia", [])
-    if not cronologia:
-        return "📚 Cronología médica\n\nNo se documenta información cronológica."
-
-    lines = ["📚 Cronología médica\n"]
-    for i, item in enumerate(cronologia[:5], start=1):
-        lines.append(
-            f"{i}) {item.get('fecha', 'No se documenta')} | "
-            f"{item.get('servicio', 'No se documenta')} | "
-            f"{item.get('tipo_nota', 'No se documenta')}"
-        )
-
-    if len(cronologia) > 5:
-        lines.append("\n[Se muestran solo los primeros eventos; ver archivos adjuntos.]")
-
-    return "\n".join(lines)
+    return data.get("texto_final", "No se documenta")
 
 
 def render_estado_familiar_message(data: Dict[str, Any]) -> str:
-    ident = data.get("identificacion", {})
-    return (
-        f"👨‍👩‍👧 Estado para familiar\n\n"
-        f"Unidad: {data.get('institucion', INSTITUTION_NAME)}\n"
-        f"Nombre: {ident.get('nombre', 'No se documenta')}\n"
-        f"Edad: {ident.get('edad', 'No se documenta')}\n"
-        f"Sexo: {ident.get('sexo', 'No se documenta')}\n\n"
-        f"Resumen:\n{data.get('resumen_clinico', 'No se documenta')}\n\n"
-        f"Estado actual:\n{data.get('estado_actual', 'No se documenta')}"
-    )
+    return data.get("texto_final", "No se documenta")
 
 
 def render_estado_autoridad_message(data: Dict[str, Any]) -> str:
-    ident = data.get("identificacion", {})
-    return (
-        f"🏛️ Estado para autoridad\n\n"
-        f"Unidad: {data.get('institucion', INSTITUTION_NAME)}\n"
-        f"Nombre: {ident.get('nombre', 'No se documenta')}\n"
-        f"NSS: {ident.get('nss', 'No se documenta')}\n"
-        f"Edad: {ident.get('edad', 'No se documenta')}\n"
-        f"Sexo: {ident.get('sexo', 'No se documenta')}\n\n"
-        f"Resumen clínico:\n{data.get('resumen_clinico', 'No se documenta')}\n\n"
-        f"Estado actual:\n{data.get('estado_actual', 'No se documenta')}"
-    )
+    return data.get("texto_final", "No se documenta")
 
 
 def render_estado_institucional_message(data: Dict[str, Any]) -> str:
-    ident = data.get("identificacion", {})
-    return (
-        f"🏢 Estado institucional\n\n"
-        f"Unidad: {data.get('institucion', INSTITUTION_NAME)}\n"
-        f"Nombre: {ident.get('nombre', 'No se documenta')}\n"
-        f"NSS: {ident.get('nss', 'No se documenta')}\n"
-        f"Edad: {ident.get('edad', 'No se documenta')}\n"
-        f"Sexo: {ident.get('sexo', 'No se documenta')}\n\n"
-        f"Servicios clínicos:\n{format_list(data.get('servicios_clinicos'))}\n\n"
-        f"Resumen clínico:\n{data.get('resumen_clinico', 'No se documenta')}"
-    )
+    return data.get("texto_final", "No se documenta")
 
 
-def truncate_message(message: str) -> str:
-    if len(message) <= TELEGRAM_MAX_MESSAGE:
-        return message
-    return message[:3900] + "\n\n[Mensaje recortado. Ver archivo adjunto.]"
+def split_message_for_telegram(message: str, max_len: int = TELEGRAM_MAX_MESSAGE) -> List[str]:
+    if len(message) <= max_len:
+        return [message]
+
+    parts = []
+    current = ""
+
+    for paragraph in message.split("\n"):
+        candidate = f"{current}\n{paragraph}".strip() if current else paragraph
+        if len(candidate) <= max_len:
+            current = candidate
+        else:
+            if current:
+                parts.append(current)
+            if len(paragraph) <= max_len:
+                current = paragraph
+            else:
+                start = 0
+                while start < len(paragraph):
+                    end = start + max_len
+                    parts.append(paragraph[start:end])
+                    start = end
+                current = ""
+
+    if current:
+        parts.append(current)
+
+    return parts
 
 # =========================
 # PDF Y WORD
@@ -1193,11 +1148,18 @@ def generate_document_from_text(text: str, mode: str) -> Dict[str, Any]:
     raise ValueError(f"Modo no soportado: {mode}")
 
 
-async def send_outputs(update: Update, data: Dict[str, Any], message: str, base_filename: str) -> None:
+async def send_outputs(
+    update: Update,
+    data: Dict[str, Any],
+    message: str,
+    base_filename: str,
+    context: ContextTypes.DEFAULT_TYPE
+) -> None:
     temp_paths = []
 
     try:
-        await update.message.reply_text(truncate_message(message))
+        for chunk in split_message_for_telegram(message):
+            await update.message.reply_text(chunk)
 
         if INCLUDE_JSON_FILE:
             with tempfile.NamedTemporaryFile(
@@ -1214,27 +1176,27 @@ async def send_outputs(update: Update, data: Dict[str, Any], message: str, base_
                 await update.message.reply_document(
                     document=f,
                     filename=f"{base_filename}.json",
+                    caption="Archivo JSON generado"
                 )
 
+        title_map = {
+            "estado_salud": "ESTADO DE SALUD",
+            "resumen_clinico": "RESUMEN CLÍNICO DOCUMENTAL",
+            "cronologia_medica": "CRONOLOGÍA MÉDICA DOCUMENTAL",
+            "estado_familiar": "ESTADO DE SALUD PARA FAMILIAR",
+            "estado_autoridad": "ESTADO DE SALUD PARA AUTORIDAD",
+            "estado_institucional": "ESTADO DE SALUD INSTITUCIONAL",
+        }
+
+        title = title_map.get(data.get("tipo_documento", ""), "DOCUMENTO")
+
         if INCLUDE_PDF_FILE:
-            with tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=".pdf",
-            ) as f:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as f:
                 pdf_path = f.name
                 temp_paths.append(pdf_path)
 
-            title_map = {
-                "estado_salud": "ESTADO DE SALUD",
-                "resumen_clinico": "RESUMEN CLÍNICO DOCUMENTAL",
-                "cronologia_medica": "CRONOLOGÍA MÉDICA DOCUMENTAL",
-                "estado_familiar": "ESTADO DE SALUD PARA FAMILIAR",
-                "estado_autoridad": "ESTADO DE SALUD PARA AUTORIDAD",
-                "estado_institucional": "ESTADO DE SALUD INSTITUCIONAL",
-            }
-
             build_pdf(
-                title=title_map.get(data.get("tipo_documento", ""), "DOCUMENTO"),
+                title=title,
                 body_text=data.get("texto_final", "No se documenta"),
                 output_path=pdf_path,
             )
@@ -1243,27 +1205,16 @@ async def send_outputs(update: Update, data: Dict[str, Any], message: str, base_
                 await update.message.reply_document(
                     document=f,
                     filename=f"{base_filename}.pdf",
+                    caption="Archivo PDF generado"
                 )
 
         if INCLUDE_DOCX_FILE:
-            with tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=".docx",
-            ) as f:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as f:
                 docx_path = f.name
                 temp_paths.append(docx_path)
 
-            title_map = {
-                "estado_salud": "ESTADO DE SALUD",
-                "resumen_clinico": "RESUMEN CLÍNICO DOCUMENTAL",
-                "cronologia_medica": "CRONOLOGÍA MÉDICA DOCUMENTAL",
-                "estado_familiar": "ESTADO DE SALUD PARA FAMILIAR",
-                "estado_autoridad": "ESTADO DE SALUD PARA AUTORIDAD",
-                "estado_institucional": "ESTADO DE SALUD INSTITUCIONAL",
-            }
-
             build_docx(
-                title=title_map.get(data.get("tipo_documento", ""), "DOCUMENTO"),
+                title=title,
                 body_text=data.get("texto_final", "No se documenta"),
                 output_path=docx_path,
             )
@@ -1272,7 +1223,15 @@ async def send_outputs(update: Update, data: Dict[str, Any], message: str, base_
                 await update.message.reply_document(
                     document=f,
                     filename=f"{base_filename}.docx",
+                    caption="Archivo Word generado"
                 )
+
+        await update.message.reply_text(
+            "✅ Proceso concluido.\n\n" + HELP_TEXT
+        )
+
+        context.user_data["mode"] = "estado"
+
     finally:
         for path in temp_paths:
             try:
@@ -1399,7 +1358,7 @@ async def handle_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             message = render_estado_institucional_message(data)
             base_filename = "estado_institucional"
 
-        await send_outputs(update, data, message, base_filename)
+        await send_outputs(update, data, message, base_filename, context)
 
     except Exception as e:
         logger.exception("Error al procesar el PDF")
