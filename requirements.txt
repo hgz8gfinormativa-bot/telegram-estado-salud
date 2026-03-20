@@ -1,3 +1,7 @@
 python-telegram-bot
-pymupdf
 openai
+pymupdf
+reportlab
+python-docx
+pillow
+pytesseract
