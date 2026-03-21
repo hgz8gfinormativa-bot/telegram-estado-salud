@@ -1,4 +1,5 @@
 import html
+import json
 import logging
 import os
 import re
@@ -52,9 +53,11 @@ INSTITUTION_NAME = "HGZ/MF 8 DR. GILBERTO FLORES IZQUIERDO"
 INCLUDE_PDF_FILE = os.getenv("INCLUDE_PDF_FILE", "true").lower() == "true"
 INCLUDE_DOCX_FILE = os.getenv("INCLUDE_DOCX_FILE", "true").lower() == "true"
 
-MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "10000"))
-MAX_PROMPT_CHARS = int(os.getenv("MAX_PROMPT_CHARS", "20000"))
-MAX_EXTENDED_CONTEXT_CHARS = int(os.getenv("MAX_EXTENDED_CONTEXT_CHARS", "18000"))
+# Ajustado para archivos grandes
+MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "12000"))
+MAX_PROMPT_CHARS = int(os.getenv("MAX_PROMPT_CHARS", "50000"))
+MAX_EXTENDED_CONTEXT_CHARS = int(os.getenv("MAX_EXTENDED_CONTEXT_CHARS", "45000"))
+
 TELEGRAM_MAX_MESSAGE = 4000
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "20"))
 MIN_TEXT_LENGTH = int(os.getenv("MIN_TEXT_LENGTH", "200"))
@@ -433,7 +436,6 @@ def split_text(text: str, max_chars: int = MAX_CHUNK_CHARS) -> List[str]:
 
 
 def safe_json_loads(content: str) -> Dict[str, Any]:
-    import json
     try:
         return json.loads(content)
     except json.JSONDecodeError:
@@ -541,7 +543,6 @@ def escape_pdf_text(text: str) -> str:
 
 
 def build_extended_context(merged: Dict[str, Any], max_chars: int = MAX_EXTENDED_CONTEXT_CHARS) -> str:
-    import json
     sections: List[str] = []
 
     sections.append("DATOS DEL PACIENTE:")
@@ -611,7 +612,6 @@ Texto:
 
 
 def merge_extractions(partials: List[Dict[str, Any]]) -> Dict[str, Any]:
-    import json
     merged = {
         "paciente": {
             "nombre": "No se documenta",
@@ -763,7 +763,6 @@ def process_medical_text(text: str) -> Dict[str, Any]:
 # =========================
 
 def build_estado_salud(merged: Dict[str, Any]) -> Dict[str, Any]:
-    import json
     prompt = f"""
 Genera un estado de salud utilizando exclusivamente la siguiente información consolidada.
 
@@ -808,7 +807,6 @@ Información ampliada:
 
 
 def build_estado_familiar(merged: Dict[str, Any]) -> Dict[str, Any]:
-    import json
     prompt = f"""
 Genera un estado de salud para familiar utilizando exclusivamente la siguiente información consolidada.
 
@@ -1240,6 +1238,9 @@ async def send_outputs(
 
         title = title_map.get(data.get("tipo_documento", ""), "DOCUMENTO")
 
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename_base = f"{base_filename}_{timestamp}"
+
         if INCLUDE_PDF_FILE:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as f:
                 pdf_path = f.name
@@ -1254,7 +1255,7 @@ async def send_outputs(
             with open(pdf_path, "rb") as f:
                 await update.message.reply_document(
                     document=f,
-                    filename=f"{base_filename}.pdf",
+                    filename=f"{filename_base}.pdf",
                     caption="Archivo PDF generado"
                 )
 
@@ -1272,7 +1273,7 @@ async def send_outputs(
             with open(docx_path, "rb") as f:
                 await update.message.reply_document(
                     document=f,
-                    filename=f"{base_filename}.docx",
+                    filename=f"{filename_base}.docx",
                     caption="Archivo Word generado"
                 )
 
